@@ -21,6 +21,12 @@ SQL_PASSWORD = os.getenv("SQL_PASSWORD")
 BLOB_CONNECTION_STRING = os.getenv("BLOB_CONNECTION_STRING")
 BLOB_CONTAINER_NAME = os.getenv("BLOB_CONTAINER_NAME")
 
+# Inicializar sessão
+if "pagina" not in st.session_state:
+    st.session_state.pagina = "produtos"
+if "produto_checkout" not in st.session_state:
+    st.session_state.produto_checkout = None
+
 # Função para conectar ao banco
 @st.cache_resource
 def get_connection():
@@ -77,50 +83,83 @@ def atualizar_produto(produto_id, nome, descricao, preco, imagem_url=None):
                        (nome, descricao, preco, produto_id))
     conn.commit()
 
-# --- INTERFACE WEB ---
-st.title("Cadastro de Produtos")
+# Página de checkout
+def pagina_checkout():
+    produto = st.session_state.produto_checkout
+    if produto is None or produto.get("id") is None:
+        st.warning("Nenhum produto selecionado.")
+        return
 
-with st.form("form_produto"):
-    nome = st.text_input("Nome do produto")
-    descricao = st.text_area("Descrição")
-    preco = st.number_input("Preço", step=0.01)
-    imagem = st.file_uploader("Imagem", type=["jpg", "jpeg", "png"])
-    submitted = st.form_submit_button("Cadastrar")
+    st.title("Checkout")
+    st.image(produto['imagem_url'], width=300)
+    st.markdown(f"### {produto['nome']}")
+    st.write(f"**Descrição:** {produto['descicao']}")
+    st.write(f"**Preço:** R$ {produto['preco']:.2f}")
 
-    if submitted:
-        if not nome or not descricao or preco <= 0 or not imagem:
-            st.warning("Todos os campos devem ser preenchidos corretamente para cadastrar um produto.")
-        else:
-            url_imagem = upload_image(imagem)
-            inserir_produto(nome, descricao, preco, url_imagem)
-            st.success("Produto cadastrado com sucesso!")
-            st.rerun()
+    if st.button("Finalizar Compra"):
+        st.success("Compra finalizada com sucesso! Obrigado pela preferência.")
 
-st.subheader("Lista de Produtos")
-df = listar_produtos()
+    if st.button("Voltar"):
+        st.session_state.pagina = "produtos"
+        st.rerun()
 
-for i, row in df.iterrows():
-    st.markdown(f"### {row['nome']}")
-    st.image(row['imagem_url'], width=200)
-    st.write(f"**Descrição:** {row['descicao']}")
-    st.write(f"**Preço:** R$ {row['preco']:.2f}")
+# Página de produtos
+def pagina_produtos():
+    st.title("Cadastro de Produtos")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button(f"Deletar {row['id']}"):
-            deletar_produto(row['id'])
-            st.rerun()
+    with st.form("form_produto"):
+        nome = st.text_input("Nome do produto")
+        descricao = st.text_area("Descrição")
+        preco = st.number_input("Preço", step=0.01)
+        imagem = st.file_uploader("Imagem", type=["jpg", "jpeg", "png"])
+        submitted = st.form_submit_button("Cadastrar")
 
-    with col2:
-        with st.expander(f"Atualizar {row['id']}"):
-            with st.form(f"update_form_{row['id']}"):
-                novo_nome = st.text_input("Nome", value=row['nome'], key=f"nome_{row['id']}")
-                nova_desc = st.text_area("Descrição", value=row['descicao'], key=f"desc_{row['id']}")
-                novo_preco = st.number_input("Preço", value=float(row['preco']), step=0.01, key=f"preco_{row['id']}")
-                nova_img = st.file_uploader("Nova imagem", type=["jpg", "jpeg", "png"], key=f"img_{row['id']}")
-                atualizar_btn = st.form_submit_button("Salvar")
-                if atualizar_btn:
-                    nova_url = upload_image(nova_img) if nova_img else None
-                    atualizar_produto(row['id'], novo_nome, nova_desc, novo_preco, nova_url)
-                    st.success("Produto atualizado!")
-                    st.rerun()
+        if submitted:
+            if not nome or not descricao or preco <= 0 or not imagem:
+                st.warning("Todos os campos devem ser preenchidos corretamente para cadastrar um produto.")
+            else:
+                url_imagem = upload_image(imagem)
+                inserir_produto(nome, descricao, preco, url_imagem)
+                st.success("Produto cadastrado com sucesso!")
+                st.rerun()
+
+    st.subheader("Lista de Produtos")
+    df = listar_produtos()
+
+    for i, row in df.iterrows():
+        st.markdown(f"### {row['nome']}")
+        st.image(row['imagem_url'], width=200)
+        st.write(f"**Descrição:** {row['descicao']}")
+        st.write(f"**Preço:** R$ {row['preco']:.2f}")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button(f"Deletar {row['id']}"):
+                deletar_produto(row['id'])
+                st.rerun()
+
+        with col2:
+            with st.expander(f"Atualizar {row['id']}"):
+                with st.form(f"update_form_{row['id']}"):
+                    novo_nome = st.text_input("Nome", value=row['nome'], key=f"nome_{row['id']}")
+                    nova_desc = st.text_area("Descrição", value=row['descicao'], key=f"desc_{row['id']}")
+                    novo_preco = st.number_input("Preço", value=float(row['preco']), step=0.01, key=f"preco_{row['id']}")
+                    nova_img = st.file_uploader("Nova imagem", type=["jpg", "jpeg", "png"], key=f"img_{row['id']}")
+                    atualizar_btn = st.form_submit_button("Salvar")
+                    if atualizar_btn:
+                        nova_url = upload_image(nova_img) if nova_img else None
+                        atualizar_produto(row['id'], novo_nome, nova_desc, novo_preco, nova_url)
+                        st.success("Produto atualizado!")
+                        st.rerun()
+
+        with col3:
+            if st.button(f"Comprar {row['id']}"):
+                st.session_state.produto_checkout = row
+                st.session_state.pagina = "checkout"
+                st.rerun()
+
+# Navegação entre páginas
+if st.session_state.pagina == "produtos":
+    pagina_produtos()
+elif st.session_state.pagina == "checkout":
+    pagina_checkout()
